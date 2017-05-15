@@ -3,51 +3,14 @@ Matt Nicklas - 11/29/16.
 Digital LED Tachometer - ATtiny84 
 */
 
-#define F_CPU 20000000UL  // 20 MHz
-#define TIMER_PRESCALER 64 //Timer prescaler is 64
-#define F_TIMER (F_CPU / TIMER_PRESCALER) // For 20 Mhz, 64 Prescaler, F_TIMER is 312,500 Hz
-#define OverflowsPerSecond (F_TIMER / 255) //Number of times the timer overflows in 1 second
+//At 500 rpm, duration between pulses is ~ 120 milliseconds
+//At 6500 rpm, duration between pulses is ~ 9 milliseconds
 
+#include "tach.h"
 #include <avr/io.h>
 #include <avr/interrupt.h>
 #include <util/delay.h>
 
-
-typedef uint8_t bool;
-#define true 1
-#define false 0
-
-
-#define NUM_BOARDS 6
-#define NUM_LEDS (NUM_BOARDS * 7) //Total number of leds.
-#define NUM_POSITIONS (NUM_BOARDS * 8) //Total number of shift register positions
-
-#define DEL_TIME 50 //Milliseconds to delay between high/low signals
-#define COLOR_THRESHOLD 10 //LED threshold to start changing from green to red.
-
-#define R_DUTY_CYCLE (OCR1B) //All range from 0-255
-#define G_DUTY_CYCLE (OCR1A)
-#define B_DUTY_CYCLE (OCR0A)
-
-//USE PORT A
-#define DISP_CLOCK 0 			     //SRCK
-#define DISP_DATA 1                  //SER IN
-#define DISP_LATCH 2				 //RCK
-#define DISP_ENABLE 3				 //G
-#define DISP_CLEAR 4				 //SRCLR
-#define RED_PWM 5
-#define GREEN_PWM 6
-#define TACH_WIRE 7
-
-//USE PORT B
-#define BLUE_PWM 2 
-
-
-void updateTach(int);
-void initTPIC();
-void startupSeq();
-void initTimers();
-void updateColors(int);
 
 volatile uint16_t elapsed = 0; //Global vars for tach wire interrupt
 volatile uint16_t newTime = 0;
@@ -59,8 +22,8 @@ int main() {
 	sei();
 	
 	//Setup variables
-	unsigned int rawRpm = 0; //Range from 0 to ~6000.
-	int numBars = 0; //Range from 0 to ~42. Corresponds with how many leds to turn on.
+	uint16_t rawRpm = 0; //Range from 0 to ~6000.
+	uint8_t numBars = 0; //Range from 0 to ~42. Corresponds with how many leds to turn on.
 	
 	initTPIC(); //Initialize registers etc.
 	startupSeq(); //It's provocative, it gets the people going.
@@ -69,7 +32,7 @@ int main() {
 	while(1) {
 		if (needCalc == true) {
 			//Receive Period from ISR
-			unsigned long elapsedSeconds = elapsed/78125; //Convert counter value to seconds. (78125 = 20 Mhz / prescaler of 256.)
+			uint16_t elapsedSeconds = elapsed / F_TIMER; //Convert counter value to seconds. (78125 = 20 Mhz / prescaler of 256.)
 			rawRpm = 60/elapsedSeconds; //Convert period to rpm 
 			numBars = (rawRpm / 140); //Convert engine rpm to numBars, aka how many leds should be lit. 4000 rpm = 20 leds 
 			updateTach(numBars);
@@ -81,7 +44,7 @@ int main() {
 }
 
 
-void updateColors(int newRpm) {
+void updateColors(uint8_t newRpm) {
 	
 	if (newRpm <=3) { //Solid blue if idling ( <600 rpm).
 		G_DUTY_CYCLE = 0;
@@ -109,9 +72,9 @@ void updateColors(int newRpm) {
 }
 
 
-void updateTach(int newRpm) {
+void updateTach(uint8_t newRpm) {
 	static int ledsLit = 0; //Initialize on startup to 0, then retain value between function calls
-	int change = newRpm - ledsLit; //change is difference between leds lit and newRpm, or leds that should be lit.
+	int8_t change = newRpm - ledsLit; //change is difference between leds lit and newRpm, or leds that should be lit.
 	
 	if (change > 0) { //if positive, need to light more leds, shift out data
 		
@@ -196,6 +159,8 @@ void initTimers() {
 		TCCR0B |= (1 << CS01) | (1 << CS00); //Set counter prescaler to 1/64.
 	#elif TIMER_PRESCALER == 256
 		TCCR0B |= (1 << CS02); //Set counter prescaler to 1/256.
+	#elif TIMER_PRESCALER == 1024
+		TCCR0B |= (1 << CS02) | (1 << CS00); //Set counter prescaler to 1/1024.
 	#endif
 	
 	TCNT0 = 0; 
@@ -210,8 +175,10 @@ void initTimers() {
 	
 	#if TIMER_PRESCALER == 64
 		TCCR1B |= (1 << CS11) | (1 << CS10); //Set counter prescaler to 1/64.
-	#elif #if TIMER_PRESCALER == 256
+	#elif TIMER_PRESCALER == 256
 		TCCR1B |= (1 << CS12); //Set counter prescaler to 1/256.
+	#elif TIMER_PRESCALER == 1024
+		TCCR1B |= (1 << CS12) | (1 << CS10); //Set counter prescaler to 1/1024.
 	#endif
 	
 	TIMSK1 = 0 | (1 << ICIE1) | (1 << TOIE1); //Enable input capture interrupt, timer1 overflow interrupt.
