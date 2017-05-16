@@ -16,6 +16,8 @@ volatile uint16_t elapsed = 0; //Global vars for tach wire interrupt
 volatile uint16_t newTime = 0;
 volatile bool needCalc = false;
 volatile uint16_t tim1ovf = 0;
+volatile uint8_t tim0ovf = 0;
+volatile bool blink = false;
 
 int main() {
 	//Enable global interrupts.
@@ -32,12 +34,18 @@ int main() {
 	while(1) {
 		if (needCalc == true) {
 			//Receive Period from ISR
-			uint16_t elapsedSeconds = elapsed / F_TIMER; //Convert counter value to seconds. (78125 = 20 Mhz / prescaler of 256.)
-			rawRpm = 60/elapsedSeconds; //Convert period to rpm 
+			rawRpm = (60 / (elapsed / F_TIMER) ); //Convert counter ticks to rpm 
 			numBars = (rawRpm / 140); //Convert engine rpm to numBars, aka how many leds should be lit. 4000 rpm = 20 leds 
 			updateTach(numBars);
 			updateColors(numBars);
 			needCalc = false;
+		}
+		if (blink == true) { //If we are blinking the leds
+			if (tim0ovf % BLINK_RATE == 0) {  //Increase value to slow blink rate
+				PORTA ^= (1 << DISP_ENABLE); //Toggle enable on and off;
+			}
+		} else {
+			PORTA &= ~(1 << DISP_ENABLE); //Drive low to enable always
 		}
 	}
 	return 0;
@@ -50,72 +58,54 @@ void updateColors(uint8_t newRpm) {
 		G_DUTY_CYCLE = 0;
 		B_DUTY_CYCLE = 255; 
 		R_DUTY_CYCLE = 0;
+		blink = false;
 	} else if (newRpm <= 10) { //If rpm is above ~600 rpm but less than ~2000 rpm, solid green 
 		G_DUTY_CYCLE = 255;
 		B_DUTY_CYCLE = 0;
 		R_DUTY_CYCLE = 0;
+		blink = false;
 	} else if (newRpm <= 25) { //Gradual change from green to red between ~2000 rpm and ~5000 rpm 
 		//led ranges from 11 to 25.
 		int redPower = newRpm - 10; //Convert to range from 1-15.
 		int greenPower = 16 - redPower; //Convert to range from 15-1;
 		
-		G_DUTY_CYCLE = 17 * greenPower;
+		G_DUTY_CYCLE = (17 * greenPower);
 		B_DUTY_CYCLE = 0;
-		R_DUTY_CYCLE = 17 * redPower;
-		
+		R_DUTY_CYCLE = (17 * redPower);
+		blink = false;
 	} else { //Above ~5000 rpm, solid red and also flash.
 		G_DUTY_CYCLE = 0;
 		B_DUTY_CYCLE = 0;
 		R_DUTY_CYCLE = 255;
-		//Also flash leds (Pulse enable pin on shift register? or pulse pwm pins...)
+		blink = true;
 	}
 }
 
 
 void updateTach(uint8_t newRpm) {
-	static int ledsLit = 0; //Initialize on startup to 0, then retain value between function calls
-	int8_t change = newRpm - ledsLit; //change is difference between leds lit and newRpm, or leds that should be lit.
+	uint8_t total = newRpm;
 	
-	if (change > 0) { //if positive, need to light more leds, shift out data
-		
-		
-		PORTA |= (1 << DISP_DATA); //set data output high to shift out 1's.
-		for (int i = 0; i < change; i++) { //For how ever many more leds to light:
-			PORTA |= (1 << DISP_CLOCK); //Pulse clock
-			//delay??
-			PORTA &= ~(1 << DISP_CLOCK); 
-		}
-		
-		PORTA |= (1 << DISP_LATCH); //Pulse latch.
+	if (newRpm > 8) { //Add compensation if more than one board is lit
+		total += (newRpm % 8);
+	}
+	
+	//Pulse clear low to clear leds
+	PORTA &= ~(1 << DISP_CLEAR);
+	//delay??
+	PORTA |= (1 << DISP_CLEAR); 
+	
+	
+	PORTA |= (1 << DISP_DATA); //set data output high to shift out 1's.
+	for (int i = 0; i < total; i++) { //For how ever many more leds to light:
+		PORTA |= (1 << DISP_CLOCK); //Pulse clock
 		//delay??
-		PORTA &= ~(1 << DISP_LATCH);
-		
-	} else if (change < 0) { //if negative, need to redraw entire display
+		PORTA &= ~(1 << DISP_CLOCK); 
+	}
 	
-		
-		PORTA &= ~(1 << DISP_DATA); //set data output low to shift out 0's.
-		for (int i = 0; i < (NUM_LEDS - newRpm + 5); i++) { //shift out enough 0's to fill empty space in right side of display.
-			PORTA |= (1 << DISP_CLOCK); //Pulse clock
-			//delay??
-			PORTA &= ~(1 << DISP_CLOCK); 
-		}
-		
-		PORTA |= (1 << DISP_DATA); //set data output high to shift out 1's.
-		for (int i = 0; i < newRpm; i++) { //shift out 1's to light correct number of leds.
-			PORTA |= (1 << DISP_CLOCK); //Pulse clock
-			//delay??
-			PORTA &= ~(1 << DISP_CLOCK); 
-		}
-		
-		PORTA |= (1 << DISP_LATCH); //Pulse latch.
-		//delay??
-		PORTA &= ~(1 << DISP_LATCH);
-		
-		
-		
-	} //else change = 0, do nothing.	
-	
-	ledsLit = newRpm; //Update variable
+	//Pulse latch.
+	PORTA |= (1 << DISP_LATCH); 
+	//delay??
+	PORTA &= ~(1 << DISP_LATCH);
 }
 
 
@@ -163,6 +153,9 @@ void initTimers() {
 		TCCR0B |= (1 << CS02) | (1 << CS00); //Set counter prescaler to 1/1024.
 	#endif
 	
+	TIMSK0 |= (1 << TOIE0); //Enable timer0 overflow interrupt.
+	
+	//Clear registers
 	TCNT0 = 0; 
 	OCR0A = 0;
 	OCR0B = 0;	
@@ -183,6 +176,7 @@ void initTimers() {
 	
 	TIMSK1 = 0 | (1 << ICIE1) | (1 << TOIE1); //Enable input capture interrupt, timer1 overflow interrupt.
 
+	//Clear registers
 	TCNT1 = 0;  
 	OCR1A = 0;
 	OCR1B = 0;
@@ -200,4 +194,8 @@ ISR(TIM1_CAPT_vect) { //Interrupt service routine for tach wire input capture
 
 ISR(TIM1_OVF_vect) { //Interrupt service routine for timer 1 overflow
 	tim1ovf++;
+}
+
+ISR(TIM0_OVF_vect) {
+	tim0ovf++;
 }

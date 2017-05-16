@@ -19,16 +19,16 @@ typedef uint8_t bool;
 
 //Pin assignments
 	//USE PORT A
-#define DISP_CLOCK 0 			     //SRCK
-#define DISP_DATA 1                  //SER IN
-#define DISP_LATCH 2				 //RCK
-#define DISP_ENABLE 3				 //G
-#define DISP_CLEAR 4				 //SRCLR
+#define DISP_CLOCK 0
+#define DISP_DATA 1
+#define DISP_LATCH 2
+#define DISP_ENABLE 3
+#define DISP_CLEAR 4
 #define RED_PWM 5
 #define GREEN_PWM 6
 #define TACH_WIRE 7
 	//USE PORT B
-#define BLUE_PWM 2 
+#define BLUE_PWM 2
 
 
 //System Configuration
@@ -38,6 +38,7 @@ typedef uint8_t bool;
 
 #define DEL_TIME 50 //Milliseconds to delay between high/low signals
 #define COLOR_THRESHOLD 10 //LED threshold to start changing from green to red.
+#define BLINK_RATE 32 //Increase value to slow rate of blinking
 
 
 //Function prototypes
