@@ -28,10 +28,26 @@ int main() {
 	uint8_t numBars = 0; //Range from 0 to ~42. Corresponds with how many leds to turn on.
 	
 	initTPIC(); //Initialize registers etc.
+	initTimers();
 	startupSeq(); //It's provocative, it gets the people going.
 	
+	while (1) {
+		for (int i = 0; i < 42; i++) {
+			updateTach(i);
+			updateColors(i);
+			_delay_ms(10);
+		}
+			
+		for (int i = 42; i >= 0; i--) {
+			updateTach(i);
+			updateColors(i);
+			_delay_ms(10);
+		}
+		
+	}
+	
 	//Loop this
-	while(1) {
+	/* while(1) {
 		if (needCalc == true) {
 			//Receive Period from ISR
 			rawRpm = (60 / (elapsed / F_TIMER) ); //Convert counter ticks to rpm 
@@ -47,73 +63,82 @@ int main() {
 		} else {
 			PORTA &= ~(1 << DISP_ENABLE); //Drive low to enable always
 		}
-	}
+	} */
 	return 0;
 }
 
 
 void updateColors(uint8_t newRpm) {
-	
-	if (newRpm <=3) { //Solid blue if idling ( <600 rpm).
-		G_DUTY_CYCLE = 0;
-		B_DUTY_CYCLE = 255; 
-		R_DUTY_CYCLE = 0;
-		blink = false;
-	} else if (newRpm <= 10) { //If rpm is above ~600 rpm but less than ~2000 rpm, solid green 
-		G_DUTY_CYCLE = 255;
-		B_DUTY_CYCLE = 0;
-		R_DUTY_CYCLE = 0;
-		blink = false;
-	} else if (newRpm <= 25) { //Gradual change from green to red between ~2000 rpm and ~5000 rpm 
-		//led ranges from 11 to 25.
-		int redPower = newRpm - 10; //Convert to range from 1-15.
-		int greenPower = 16 - redPower; //Convert to range from 15-1;
+	#if COLOR_MODE == 1
+		if (newRpm <=3) { //Solid blue if idling ( <600 rpm).
+			G_DUTY_CYCLE = 0;
+			B_DUTY_CYCLE = (255 * BRIGHTNESS) / 100; 
+			R_DUTY_CYCLE = 0;
+			blink = false;
+		} else if (newRpm <= 10) { //If rpm is above ~600 rpm but less than ~2000 rpm, solid green 
+			G_DUTY_CYCLE = (255 * BRIGHTNESS) / 100;
+			B_DUTY_CYCLE = 0;
+			R_DUTY_CYCLE = 0;
+			blink = false;
+		} else if (newRpm <= 25) { //Gradual change from green to red between ~2000 rpm and ~5000 rpm 
+			//led ranges from 11 to 25.
+			unsigned int redPower = newRpm - 10; //Convert to range from 1-15.
+			unsigned int greenPower = 16 - redPower; //Convert to range from 15-1;
 		
-		G_DUTY_CYCLE = (17 * greenPower);
-		B_DUTY_CYCLE = 0;
-		R_DUTY_CYCLE = (17 * redPower);
-		blink = false;
-	} else { //Above ~5000 rpm, solid red and also flash.
+			G_DUTY_CYCLE = (17 * greenPower * BRIGHTNESS) / 100;
+			B_DUTY_CYCLE = 0;
+			R_DUTY_CYCLE = (17 * redPower * BRIGHTNESS) / 100;
+			blink = false;
+			//blink = true;
+		} else { //Above ~5000 rpm, solid red and also flash.
+			G_DUTY_CYCLE = 0;
+			B_DUTY_CYCLE = (BRIGHTNESS * 1 * (newRpm - 25)) / 100;
+			R_DUTY_CYCLE = (255 * BRIGHTNESS) / 100;
+			//blink = true;
+		}
+	#elif COLOR_MODE == 2
 		G_DUTY_CYCLE = 0;
-		B_DUTY_CYCLE = 0;
-		R_DUTY_CYCLE = 255;
-		blink = true;
-	}
+		B_DUTY_CYCLE = (255 * BRIGHTNESS) / 100; 
+		R_DUTY_CYCLE = (255 * BRIGHTNESS) / 100;
+		if (newRpm > 25) {
+			blink = true;
+		} else {
+			blink = false;
+		}
+	#endif
 }
 
 
 void updateTach(uint8_t newRpm) {
 	uint8_t total = newRpm;
 	
-	if (newRpm > 8) { //Add compensation if more than one board is lit
-		total += (newRpm % 8);
-	}
+	//if (newRpm > 8) { //Add compensation if more than one board is lit
+		total += (newRpm / 7);
+//	}
 	
 	//Pulse clear low to clear leds
 	PORTA &= ~(1 << DISP_CLEAR);
-	//delay??
 	PORTA |= (1 << DISP_CLEAR); 
 	
 	
 	PORTA |= (1 << DISP_DATA); //set data output high to shift out 1's.
 	for (int i = 0; i < total; i++) { //For how ever many more leds to light:
 		PORTA |= (1 << DISP_CLOCK); //Pulse clock
-		//delay??
 		PORTA &= ~(1 << DISP_CLOCK); 
 	}
 	
 	//Pulse latch.
 	PORTA |= (1 << DISP_LATCH); 
-	//delay??
 	PORTA &= ~(1 << DISP_LATCH);
 }
 
 
 void initTPIC(){
 	//Setup port registers
-	DDRA |= (1 << DISP_CLOCK) | (1 << DISP_DATA) | (1 << DISP_LATCH) | (1 << DISP_ENABLE) | (1 << DISP_CLEAR) | (1 << RED_PWM) | (1 << GREEN_PWM);
-	DDRB |= (1 << BLUE_PWM);
+	DDRA |= (1 << DISP_CLOCK) | (1 << DISP_DATA) | (1 << DISP_LATCH) | (1 << DISP_ENABLE) | (1 << DISP_CLEAR) | (1 << RED_PWM) | (1 << BLUE_PWM);
+	DDRB |= (1 << GREEN_PWM);
 	DDRA &= ~(1 << TACH_WIRE);
+	
 	
 	//Setup initial outputs       
 	PORTA &= ~(1 << DISP_CLOCK); //Clock normally low, pulse high to clock in data.
@@ -122,9 +147,13 @@ void initTPIC(){
 	PORTA &= ~(1 << DISP_ENABLE); //Set low = outputs enabled
 	PORTA |= (1 << DISP_CLEAR); //Set clear high. (Pulse low to clear)
 	
+	PORTA |= (1 << RED_PWM); //Start high to turn off MOSFET
+	PORTB |= (1 << GREEN_PWM);
+	PORTA |= (1 << BLUE_PWM);
+		
 	//Pulse low to clear registers on startup.
 	PORTA &= ~(1 << DISP_CLEAR); 
-	_delay_ms(DEL_TIME);	
+	//_delay_ms(DEL_TIME);	
 	PORTA |= (1 << DISP_CLEAR);
 	
 	
@@ -142,7 +171,7 @@ void startupSeq() {
 void initTimers() {
 
 	//Timer0 (8 bit) - PB2 (Blue led PWM Output).
-	TCCR0A = 0 | (1 << COM0A1); //Clear OC0A on compare, set on bottom (non-inverting mode).
+	TCCR0A = 0 | (1 << COM0A1) | (1 << COM0A0); //(inverting mode).
 	TCCR0A |= (1 << WGM01) | (1 << WGM00); //Mode 3, Fast PWM, TOP = 0xFF, Update OCRx at BOTTOM, TOV flag set on MAX.
 	
 	#if TIMER_PRESCALER == 64
@@ -161,7 +190,7 @@ void initTimers() {
 	OCR0B = 0;	
 	
 	//Timer1 (16 bit) - PA5 (Red led PWM Output), PA6 (Green led PWM Output), PA7 (Input capture tach wire)
-	TCCR1A = 0 | (1 << COM1A1) | (1 << COM1B1); //Clear OC1A/OC1B on compare, set on bottom (non-inverting mode).
+	TCCR1A = 0 | (1 << COM1A1) | (1 << COM1B1) | (1 << COM1A0) | (1 << COM1B0); //(inverting mode).
 	TCCR1A |= (1 << WGM10); //Fast PWM, 8-bit, set WGM13:10 to 0101.
 	TCCR1B = 0 | (1 << WGM12);
 	TCCR1B |= (1 << ICES1); //Input capture on rising edge
@@ -198,4 +227,11 @@ ISR(TIM1_OVF_vect) { //Interrupt service routine for timer 1 overflow
 
 ISR(TIM0_OVF_vect) {
 	tim0ovf++;
+	if (blink == true) { //If we are blinking the leds
+		if (tim0ovf % BLINK_RATE == 0) {  //Increase value to slow blink rate
+			PORTA ^= (1 << DISP_ENABLE); //Toggle enable on and off;
+		}
+	} else {
+		PORTA &= ~(1 << DISP_ENABLE); //Drive low to enable always
+	}
 }

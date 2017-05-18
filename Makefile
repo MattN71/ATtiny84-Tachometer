@@ -24,7 +24,7 @@ viewhex:
 	cat $(program_name).hex
 
 .PHONY: upload
-upload:
+upload: all
 	avrdude -c $(programmer) -p t84 -U flash:w:$(program_name).hex
 	
 .PHONY: fuse

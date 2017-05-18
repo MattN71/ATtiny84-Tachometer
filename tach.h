@@ -4,6 +4,8 @@
 #include <avr/io.h>
 
 
+
+
 //Boolean Implementation
 typedef uint8_t bool;
 #define true 1
@@ -24,11 +26,11 @@ typedef uint8_t bool;
 #define DISP_LATCH 2
 #define DISP_ENABLE 3
 #define DISP_CLEAR 4
-#define RED_PWM 5
-#define GREEN_PWM 6
+#define RED_PWM 5 //Correct
+#define BLUE_PWM 6 //Should be blue
 #define TACH_WIRE 7
 	//USE PORT B
-#define BLUE_PWM 2
+#define GREEN_PWM 2
 
 
 //System Configuration
@@ -38,8 +40,9 @@ typedef uint8_t bool;
 
 #define DEL_TIME 50 //Milliseconds to delay between high/low signals
 #define COLOR_THRESHOLD 10 //LED threshold to start changing from green to red.
-#define BLINK_RATE 32 //Increase value to slow rate of blinking
-
+#define BLINK_RATE 6 //Increase value to slow rate of blinking
+#define BRIGHTNESS 100 //Brightness percentage
+#define COLOR_MODE 1 //Define mode of color change or constant color
 
 //Function prototypes
 void updateTach(uint8_t);
@@ -50,7 +53,7 @@ void updateColors(uint8_t);
 
 
 #define R_DUTY_CYCLE (OCR1B) //All range from 0-255
-#define G_DUTY_CYCLE (OCR1A)
-#define B_DUTY_CYCLE (OCR0A)
+#define G_DUTY_CYCLE (OCR0A)
+#define B_DUTY_CYCLE (OCR1A)
 
 #endif /* TACH_H */
