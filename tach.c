@@ -9,13 +9,13 @@ Digital LED Tachometer - ATtiny84
 #include "tach.h"
 #include <avr/io.h>
 #include <avr/interrupt.h>
-#include <util/delay.h>
+//#include <util/delay.h>
 
 
-volatile uint16_t elapsed = 0; //Global vars for tach wire interrupt
-volatile uint16_t newTime = 0;
+volatile uint32_t elapsed = 0; //Global vars for tach wire interrupt
+volatile uint32_t newTime = 0;
 volatile bool needCalc = false;
-volatile uint16_t tim1ovf = 0;
+volatile uint32_t tim1ovf = 0;
 volatile uint8_t tim0ovf = 0;
 volatile bool blink = false;
 
@@ -24,53 +24,35 @@ int main() {
 	sei();
 	
 	//Setup variables
-	uint16_t rawRpm = 0; //Range from 0 to ~6000.
-	uint8_t numBars = 0; //Range from 0 to ~42. Corresponds with how many leds to turn on.
+	uint32_t rawRpm = 0; //Range from 0 to ~6000.
+	uint16_t numBars = 0; //Range from 0 to ~42. Corresponds with how many leds to turn on.
 	
-	initTPIC(); //Initialize registers etc.
+	initTPIC(); //Initialize registers etc
 	initTimers();
 	startupSeq(); //It's provocative, it gets the people going.
 	
-	while (1) {
-		for (int i = 0; i < 42; i++) {
-			updateTach(i);
-			updateColors(i);
-			_delay_ms(10);
-		}
-			
-		for (int i = 42; i >= 0; i--) {
-			updateTach(i);
-			updateColors(i);
-			_delay_ms(10);
-		}
-		
-	}
+	updateTach(15);
+	updateColors(15);
 	
 	//Loop this
-	/* while(1) {
+	 while(1) {
 		if (needCalc == true) {
 			//Receive Period from ISR
-			rawRpm = (60 / (elapsed / F_TIMER) ); //Convert counter ticks to rpm 
+			rawRpm = ( 60 * F_TIMER) / elapsed; //Convert counter ticks to rpm 
 			numBars = (rawRpm / 140); //Convert engine rpm to numBars, aka how many leds should be lit. 4000 rpm = 20 leds 
+				
 			updateTach(numBars);
 			updateColors(numBars);
 			needCalc = false;
 		}
-		if (blink == true) { //If we are blinking the leds
-			if (tim0ovf % BLINK_RATE == 0) {  //Increase value to slow blink rate
-				PORTA ^= (1 << DISP_ENABLE); //Toggle enable on and off;
-			}
-		} else {
-			PORTA &= ~(1 << DISP_ENABLE); //Drive low to enable always
-		}
-	} */
+	} 
 	return 0;
 }
 
 
-void updateColors(uint8_t newRpm) {
+void updateColors(uint16_t newRpm) {
 	#if COLOR_MODE == 1
-		if (newRpm <=3) { //Solid blue if idling ( <600 rpm).
+		if (newRpm <=5) { //Solid blue if idling ( <600 rpm).
 			G_DUTY_CYCLE = 0;
 			B_DUTY_CYCLE = (255 * BRIGHTNESS) / 100; 
 			R_DUTY_CYCLE = 0;
@@ -89,19 +71,18 @@ void updateColors(uint8_t newRpm) {
 			B_DUTY_CYCLE = 0;
 			R_DUTY_CYCLE = (17 * redPower * BRIGHTNESS) / 100;
 			blink = false;
-			//blink = true;
 		} else { //Above ~5000 rpm, solid red and also flash.
 			G_DUTY_CYCLE = 0;
 			B_DUTY_CYCLE = (BRIGHTNESS * 1 * (newRpm - 25)) / 100;
 			R_DUTY_CYCLE = (255 * BRIGHTNESS) / 100;
-			//blink = true;
+			blink = true;
 		}
 	#elif COLOR_MODE == 2
 		G_DUTY_CYCLE = 0;
 		B_DUTY_CYCLE = (255 * BRIGHTNESS) / 100; 
 		R_DUTY_CYCLE = (255 * BRIGHTNESS) / 100;
 		if (newRpm > 25) {
-			blink = true;
+			//blink = true;
 		} else {
 			blink = false;
 		}
@@ -109,12 +90,11 @@ void updateColors(uint8_t newRpm) {
 }
 
 
-void updateTach(uint8_t newRpm) {
+void updateTach(uint16_t newRpm) {
 	uint8_t total = newRpm;
-	
-	//if (newRpm > 8) { //Add compensation if more than one board is lit
-		total += (newRpm / 7);
-//	}
+
+	total += (newRpm / 7);
+
 	
 	//Pulse clear low to clear leds
 	PORTA &= ~(1 << DISP_CLEAR);
@@ -164,7 +144,9 @@ void initTPIC(){
 }
 
 void startupSeq() {
-//Do some stuff
+	//Do some stuff
+	updateTach(0);
+	
 
 }
 
@@ -213,12 +195,12 @@ void initTimers() {
 }
 
 ISR(TIM1_CAPT_vect) { //Interrupt service routine for tach wire input capture
-	static uint16_t oldTime = 0; 
-	newTime = ICR1 + (tim1ovf * 0xFF); //Store current time from Timer0 into global variable. 0 - 65535
+	static uint32_t oldTime = 0; 
+	newTime = ICR1 + (0xFF * tim1ovf); //Store current time from Timer0 into global variable. 0 - 65535
 	elapsed = newTime - oldTime; //Store period between pulses as elapsed.
-	oldTime = ICR1;
-	tim1ovf = 0;
-	needCalc = true;
+	oldTime = newTime;
+	//tim1ovf = 0;
+	needCalc = true;	
 }
 
 ISR(TIM1_OVF_vect) { //Interrupt service routine for timer 1 overflow
@@ -227,6 +209,7 @@ ISR(TIM1_OVF_vect) { //Interrupt service routine for timer 1 overflow
 
 ISR(TIM0_OVF_vect) {
 	tim0ovf++;
+
 	if (blink == true) { //If we are blinking the leds
 		if (tim0ovf % BLINK_RATE == 0) {  //Increase value to slow blink rate
 			PORTA ^= (1 << DISP_ENABLE); //Toggle enable on and off;

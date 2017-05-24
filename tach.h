@@ -26,8 +26,8 @@ typedef uint8_t bool;
 #define DISP_LATCH 2
 #define DISP_ENABLE 3
 #define DISP_CLEAR 4
-#define RED_PWM 5 //Correct
-#define BLUE_PWM 6 //Should be blue
+#define RED_PWM 5 
+#define BLUE_PWM 6
 #define TACH_WIRE 7
 	//USE PORT B
 #define GREEN_PWM 2
@@ -41,15 +41,15 @@ typedef uint8_t bool;
 #define DEL_TIME 50 //Milliseconds to delay between high/low signals
 #define COLOR_THRESHOLD 10 //LED threshold to start changing from green to red.
 #define BLINK_RATE 6 //Increase value to slow rate of blinking
-#define BRIGHTNESS 100 //Brightness percentage
+#define BRIGHTNESS 60 //Brightness percentage
 #define COLOR_MODE 1 //Define mode of color change or constant color
 
 //Function prototypes
-void updateTach(uint8_t);
+void updateTach(uint16_t);
 void initTPIC();
 void startupSeq();
 void initTimers();
-void updateColors(uint8_t);
+void updateColors(uint16_t);
 
 
 #define R_DUTY_CYCLE (OCR1B) //All range from 0-255

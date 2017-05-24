@@ -8,8 +8,8 @@ programmer := usbtiny
 
 .PHONY: all
 all:
-	avr-gcc -g -O -mmcu=$(cpu) -c $(program_SRCS)
-	avr-gcc -g -O -mmcu=$(cpu) -o $(program_name).elf $(program_OBJS)
+	avr-gcc -g -O0 -mmcu=$(cpu) -c $(program_SRCS)
+	avr-gcc -g -O0 -mmcu=$(cpu) -o $(program_name).elf $(program_OBJS)
 	avr-objcopy -j .text -j .data -O ihex $(program_name).elf $(program_name).hex
 	avr-size -C --mcu=$(cpu) $(program_name).elf 
 
