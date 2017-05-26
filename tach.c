@@ -31,14 +31,13 @@ int main() {
 	initTimers();
 	startupSeq(); //It's provocative, it gets the people going.
 	
-	updateTach(15);
-	updateColors(15);
+	updateTach(0);
 	
 	//Loop this
 	 while(1) {
 		if (needCalc == true) {
 			//Receive Period from ISR
-			rawRpm = ( 60 * F_TIMER) / elapsed; //Convert counter ticks to rpm 
+			rawRpm = ( ( 60 * F_TIMER) / elapsed ) / 6; //Convert counter ticks to rpm 
 			numBars = (rawRpm / 140); //Convert engine rpm to numBars, aka how many leds should be lit. 4000 rpm = 20 leds 
 				
 			updateTach(numBars);
@@ -175,7 +174,7 @@ void initTimers() {
 	TCCR1A = 0 | (1 << COM1A1) | (1 << COM1B1) | (1 << COM1A0) | (1 << COM1B0); //(inverting mode).
 	TCCR1A |= (1 << WGM10); //Fast PWM, 8-bit, set WGM13:10 to 0101.
 	TCCR1B = 0 | (1 << WGM12);
-	TCCR1B |= (1 << ICES1); //Input capture on rising edge
+	//TCCR1B |= (1 << ICES1); //Input capture on rising edge
 	
 	#if TIMER_PRESCALER == 64
 		TCCR1B |= (1 << CS11) | (1 << CS10); //Set counter prescaler to 1/64.
@@ -198,6 +197,8 @@ ISR(TIM1_CAPT_vect) { //Interrupt service routine for tach wire input capture
 	static uint32_t oldTime = 0; 
 	newTime = ICR1 + (0xFF * tim1ovf); //Store current time from Timer0 into global variable. 0 - 65535
 	elapsed = newTime - oldTime; //Store period between pulses as elapsed.
+	//elapsed = (elapsed >> 1);
+	//elapsed = (elapsed << 1);
 	oldTime = newTime;
 	//tim1ovf = 0;
 	needCalc = true;	

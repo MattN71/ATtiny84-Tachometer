@@ -41,7 +41,7 @@ typedef uint8_t bool;
 #define DEL_TIME 50 //Milliseconds to delay between high/low signals
 #define COLOR_THRESHOLD 10 //LED threshold to start changing from green to red.
 #define BLINK_RATE 6 //Increase value to slow rate of blinking
-#define BRIGHTNESS 60 //Brightness percentage
+#define BRIGHTNESS 100 //Brightness percentage
 #define COLOR_MODE 1 //Define mode of color change or constant color
 
 //Function prototypes
